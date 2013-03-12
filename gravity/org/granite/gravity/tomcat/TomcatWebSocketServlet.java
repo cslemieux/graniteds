@@ -67,17 +67,26 @@ public class TomcatWebSocketServlet extends WebSocketServlet {
 		try {
 			String connectMessageId = request.getHeader("connectId") != null ? request.getHeader("connectId") : request.getParameter("connectId");
 			String clientId = request.getHeader("GDSClientId") != null ? request.getHeader("GDSClientId") : request.getParameter("GDSClientId");
+			String clientType = request.getHeader("GDSClientType") != null ? request.getHeader("GDSClientType") : request.getParameter("GDSClientType");
 			String sessionId = null;
 			HttpSession session = request.getSession(false);
-			if (session != null)
+			if (session != null) {
+		        ServletGraniteContext.createThreadInstance(gravity.getGraniteConfig(), gravity.getServicesConfig(), 
+		        	getServletContext(), session, clientType);
+		        
 				sessionId = session.getId();
-			if (request.getHeader("GDSSessionId") != null)
-				sessionId = request.getHeader("GDSSessionId");
-			if (sessionId == null && request.getParameter("GDSSessionId") != null)
-				sessionId = request.getParameter("GDSSessionId");
-			
-	        ServletGraniteContext.createThreadInstance(gravity.getGraniteConfig(), gravity.getServicesConfig(), 
-	        		getServletContext(), sessionId); 
+			}
+			else {
+				for (int i = 0; i < request.getCookies().length; i++) {
+					if ("JSESSIONID".equals(request.getCookies()[i].getName())) {
+						sessionId = request.getCookies()[i].getValue();
+						break;
+					}
+				}				
+				
+				ServletGraniteContext.createThreadInstance(gravity.getGraniteConfig(), gravity.getServicesConfig(), 
+	        		getServletContext(), sessionId, clientType); 
+			}
 			
 			log.info("WebSocket connection started %s clientId %s sessionId %s", protocol, clientId, sessionId);
 			

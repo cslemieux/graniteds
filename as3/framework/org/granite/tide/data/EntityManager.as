@@ -74,6 +74,11 @@ package org.granite.tide.data {
         
         private static var log:ILogger = Log.getLogger("org.granite.tide.data.EntityManager");
     
+		public static const INITIALIZE:String = "initialize";
+		public static const UNINITIALIZE:String = "uninitialize";
+		
+		public static const LOAD_STATE_CHANGE:String = "loadStateChange";
+		
     	private var _context:BaseContext;
         private var _customMergers:Array = null;
 
@@ -138,16 +143,6 @@ package org.granite.tide.data {
         public function clearCache():void {
             _mergeContext.clear();
         }
-		
-		
-		public function initTmpMergeContext():MergeContext {
-			_mergeContext = new MergeContext(_context, this, _dirtyCheckContext);
-			return _mergeContext;
-		}
-		
-		public function restoreMergeContext(mergeContext:MergeContext):void {
-			_mergeContext = mergeContext;
-		}
 		
 		
 		/**
@@ -1654,6 +1649,10 @@ package org.granite.tide.data {
         public function isEntityChanged(entity:IEntity, propName:String = null, value:* = null):Boolean {
             return _dirtyCheckContext.isEntityChanged(entity, propName, value);
         }
+		
+		public function isEntityDeepChanged(entity:IEntity):Boolean {
+			return _dirtyCheckContext.isEntityDeepChanged(entity);
+		}
         
         
         /**

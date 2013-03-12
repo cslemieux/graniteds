@@ -69,15 +69,29 @@ public class ServletGraniteContext extends GraniteContext {
     protected SessionMap sessionMap = null;
     protected HttpServletRequest request = null;
     protected HttpServletResponse response = null;
+    protected HttpSession session = null;
 
 
     public static ServletGraniteContext createThreadInstance(
         GraniteConfig graniteConfig,
         ServicesConfig servicesConfig,
         ServletContext context,
-        String sessionId) {
+        String sessionId,
+        String clientType) {
 
-        ServletGraniteContext graniteContext = new ServletGraniteContext(graniteConfig, servicesConfig, context, sessionId);
+        ServletGraniteContext graniteContext = new ServletGraniteContext(graniteConfig, servicesConfig, context, sessionId, clientType);
+        setCurrentInstance(graniteContext);
+        return graniteContext;
+    }
+    
+    public static ServletGraniteContext createThreadInstance(
+        GraniteConfig graniteConfig,
+        ServicesConfig servicesConfig,
+        ServletContext context,
+        HttpSession session,
+        String clientType) {
+
+        ServletGraniteContext graniteContext = new ServletGraniteContext(graniteConfig, servicesConfig, context, session, clientType);
         setCurrentInstance(graniteContext);
         return graniteContext;
     }
@@ -87,10 +101,23 @@ public class ServletGraniteContext extends GraniteContext {
         GraniteConfig graniteConfig,
         ServicesConfig servicesConfig,
         ServletContext servletContext,
-        String sessionId) {
+        String sessionId,
+        String clientType) {
 
-        super(graniteConfig, servicesConfig, sessionId);
+        super(graniteConfig, servicesConfig, sessionId, clientType);
         this.servletContext = servletContext;
+    }
+    
+    protected ServletGraniteContext(
+        GraniteConfig graniteConfig,
+        ServicesConfig servicesConfig,
+        ServletContext servletContext,
+        HttpSession session,
+        String clientType) {
+
+        super(graniteConfig, servicesConfig, session.getId(), clientType);
+        this.servletContext = servletContext;
+        this.session = session;
     }
 
     public ServletContext getServletContext() {
@@ -114,9 +141,13 @@ public class ServletGraniteContext extends GraniteContext {
     }
 
     public HttpSession getSession() {
+    	if (session != null)
+    		return session;
+    	
     	if (getSessionId() == null)
     		return null;
     	
+    	// Lookup session in session map when using embedded Jetty
     	@SuppressWarnings("unchecked")
 		Map<String, HttpSession> sessionMap = (Map<String, HttpSession>)servletContext.getAttribute(GraniteConfigListener.GRANITE_SESSION_MAP);
         return sessionMap != null ? sessionMap.get(getSessionId()) : null;

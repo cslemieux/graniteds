@@ -134,12 +134,16 @@ package org.granite.tide {
 		public static const QCN_ILIST:String = getQualifiedClassName(IList);
 		public static const QCN_IUICOMPONENT:String = getQualifiedClassName(IUIComponent);
 		
+		public static const WINDOW_CREATE:String = "globalNotifyWindowCreate";
+		public static const WINDOW_CLOSE:String = "globalNotifyWindowClose";
+		
         
 	    private static var _tide:Tide;
 	    
 	    private var _destination:String = null;
 	            
 		private var _componentStore:ComponentStore = null;
+		private var _managedInstances:Dictionary = new Dictionary(true);
 		private var _contextManager:IContextManager;
 		private var _entityDescriptors:Dictionary = new Dictionary(true);
         private var _componentClass:Class;
@@ -324,6 +328,19 @@ package org.granite.tide {
 			_currentModulePrefix = prefix;
 		}
 		
+		
+		public function getManagedInstance(component:Object):Array {
+			return _managedInstances[component] as Array;
+		}
+		public function setManagedInstance(component:Object, context:BaseContext, name:String):void {
+			if (component is IUIComponent)
+				_managedInstances[component] = [ context, name ];
+		}
+		public function removeManagedInstance(component:Object):void {
+			delete _managedInstances[component];
+		}
+		
+		
 		/**
 		 *  @private
 		 *  Name of the current namespace in which observers and injections are handled
@@ -379,7 +396,11 @@ package org.granite.tide {
 	            app.systemManager.addEventListener(Event.ADDED, addedHandler, 0, false, true);
 				app.addEventListener(Event.REMOVED, removedHandler, 0, false, true);
 	            app.systemManager.addEventListener(Event.REMOVED, removedHandler, 0, false, true);
-	        }
+				app.addEventListener(WINDOW_CREATE, nativeAddedHandler, 0, false, true); 
+				app.systemManager.addEventListener(WINDOW_CREATE, nativeAddedHandler, 0, false, true); 
+				app.addEventListener(WINDOW_CLOSE, nativeRemovedHandler, 0, false, true); 
+				app.systemManager.addEventListener(WINDOW_CLOSE, nativeRemovedHandler, 0, false, true); 	        
+			}
 	        
             ctx.raiseEvent(STARTUP);
 		}
@@ -395,6 +416,10 @@ package org.granite.tide {
 	        app.systemManager.removeEventListener(Event.ADDED, addedHandler);
 			app.removeEventListener(Event.REMOVED, removedHandler);
 	        app.systemManager.removeEventListener(Event.REMOVED, removedHandler);
+			app.removeEventListener(WINDOW_CREATE, nativeAddedHandler); 
+			app.systemManager.removeEventListener(WINDOW_CREATE, nativeAddedHandler); 
+			app.removeEventListener(WINDOW_CLOSE, nativeRemovedHandler); 
+			app.systemManager.removeEventListener(WINDOW_CLOSE, nativeRemovedHandler); 	        
 		}
 		
 		
@@ -470,6 +495,27 @@ package org.granite.tide {
 		
 		/**
 		 * 	@private
+		 * 	Find the context where the uiComponent is managed
+		 * 
+		 * 	@param uiComponent an UI component
+		 * 	@param returnDefault also search in default context
+		 *
+		 * 	@return the context managing the uiComponent
+		 */
+		public function findContext(uiComponent:IUIComponent, returnDefault:Boolean = true):BaseContext {
+			var ctxName:Array = getManagedInstance(uiComponent) as Array;
+			if (ctxName != null)
+				return ctxName[0] as BaseContext;
+			
+			if (uiComponent.parent != null && uiComponent.parent is IUIComponent)
+				return findContext(uiComponent.parent as IUIComponent);
+			
+			return returnDefault ? getContext() : null;
+		}
+		
+		
+		/**
+		 * 	@private
 		 * 	Internal handler for ADDED events that scans UI components for [Name] annotations
 		 * 
 		 * 	@param event the ADDED event
@@ -478,43 +524,55 @@ package org.granite.tide {
 			internalAdd(event.target);
 		}
 		
-		private function internalAdd(component:Object):void {
+		private function internalAdd(component:Object, parent:Object = null):void {
 			var className:String = getQualifiedClassName(component);
 			if (!_componentStore.isFxClass(className)) {
 				var info:ComponentInfo = DescribeTypeCache.describeType(component)['componentInfo'] as ComponentInfo;
 				if (info.name != null) {
 					var name:String = null;
+					var autoName:Boolean = false;
 					if (info.name.length > 0)
 						name = info.name;
-					else if (info.module.length > 0)
+					else if (info.module.length > 0) {
 						name = info.module + "." + internalUIComponentName(component);
-					else
+						autoName = true;
+					}
+					else {
 						name = internalUIComponentName(component);
+						autoName = true;
+					}
 	            	
 	            	var saveModulePrefix:String = _currentModulePrefix;
 	            	_currentModulePrefix = "";
 					
-		        	var ctx:BaseContext = _contextManager.findContext(component as IUIComponent);
-		            if ((info.scope != "conversation" && ctx.meta_isGlobal())
+		        	var ctx:BaseContext = findContext(parent != null ? parent as IUIComponent : component as IUIComponent);
+		            if (!info.scope 
+						|| (info.scope != "conversation" && ctx.meta_isGlobal())
 		            	|| (info.scope == "conversation" && !ctx.meta_isGlobal())) {
 						
 						// If already present in the context with another name, remove it
-						var existingName:String = null;
-						for (var n:String in ctx) {
-							if (n != name && ctx.meta_getInstance(n, false, true) === component) {
-								log.debug("component instance renamed from {0} to {1}", n, name);
-								existingName = n;
-								break;
+						var existingCtxName:Array = getManagedInstance(component);
+						var existingName:String = existingCtxName != null ? existingCtxName[1] as String : null; 
+						
+						var add:Boolean = true;
+						if (existingName != null) {
+							if (getDescriptor(existingName, false).autoUIName) {
+								log.debug("component instance renamed from {0} to {1}", existingName, name);
+								removeComponent(existingName);
 							}
+							else
+								add = false;
 						}
-						if (existingName != null)
-							removeComponent(existingName);
 		            	
-		            	var instance:Object = ctx.meta_getInstance(name, false, true);
-		            	if (instance !== component) {
-			        		ctx[name] = component;
-			        		log.info("added component {0}", name);
-			        	}
+						if (add) {
+			            	var instance:Object = ctx.meta_getInstance(name, false, true);
+			            	if (instance !== component) {
+				        		ctx[name] = component;
+								if (autoName)
+									getDescriptor(name).autoUIName = true;
+				        		log.info("added component {0}", name);
+				        	}
+						}
 			       	}
 		        	
 		        	_currentModulePrefix = saveModulePrefix;
@@ -527,7 +585,7 @@ package org.granite.tide {
 				try {
 					if (!(component is IDEFERREDCONTENTOWNER_CLASS) || component.deferredContentCreated) {
 						for (i = 0; i < component.numElements; i++)
-							internalAdd(component.getElementAt(i));
+							internalAdd(component.getElementAt(i), parent != null ? parent : component);
 					}
 				}
 				catch (e:SecurityError) {
@@ -537,7 +595,7 @@ package org.granite.tide {
 			else if (component is DisplayObjectContainer) {
 				try {
 					for (i = 0; i < component.numChildren; i++)
-						internalAdd(component.getChildAt(i));
+						internalAdd(component.getChildAt(i), parent != null ? parent : component);
 				}
 				catch (e:SecurityError) {
 					// Stop here: component does not allow access to its children
@@ -586,27 +644,22 @@ package org.granite.tide {
 			var info:ComponentInfo = DescribeTypeCache.describeType(component)['componentInfo'] as ComponentInfo;
 			if (info.name != null) {
 				var name:String = null;
-				var autoName:Boolean = false;
 				if (info.name.length > 0)
 					name = info.name;
-				else if (info.module.length > 0) {
-					autoName = true;
+				else if (info.module.length > 0)
 					name = info.module + "." + internalUIComponentName(component);
-				}
-				else {
-					autoName = true;
+				else
 					name = internalUIComponentName(component);
-				}
 				
             	var saveModulePrefix:String = _currentModulePrefix;
             	_currentModulePrefix = "";
 				
-				if (autoName) {
+				if (getDescriptor(name).autoUIName) {
 					removeComponent(name);
 			        log.info("removed component {0}", name);
 				}
 				else {
-		        	var ctx:BaseContext = _contextManager.findContext(component as IUIComponent, false);
+		        	var ctx:BaseContext = findContext(component as IUIComponent, false);
 		        	if (ctx != null) {
 		            	var instance:Object = ctx.meta_getInstance(name, false, true);
 		            	if (instance !== null) {
@@ -619,8 +672,37 @@ package org.granite.tide {
 			   	_currentModulePrefix = saveModulePrefix;
 		    }
 		}
-				
-				
+
+		
+		private function nativeAddedHandler(event:Event):void {
+			var window:Object = Object(event).window;
+			
+			internalAdd(window); 
+			window.addEventListener(Event.ADDED, addedHandler, false, 0, true); 
+			window.systemManager.addEventListener(Event.ADDED, addedHandler, false, 0, true); 
+			window.addEventListener(Event.REMOVED, removedHandler, false, 0, true); 
+			window.systemManager.addEventListener(Event.REMOVED, removedHandler, false, 0, true); 
+			window.addEventListener(WINDOW_CREATE, nativeAddedHandler, false, 0, true); 
+			window.systemManager.addEventListener(WINDOW_CREATE, nativeAddedHandler, false, 0, true); 
+			window.addEventListener(WINDOW_CLOSE, nativeRemovedHandler, false, 0, true); 
+			window.systemManager.addEventListener(WINDOW_CLOSE, nativeRemovedHandler, false, 0, true); 
+		} 
+
+		private function nativeRemovedHandler(event:Event):void { 
+			var window:Object = Object(event).window;
+			
+			window.removeEventListener(Event.ADDED, addedHandler); 
+			window.systemManager.removeEventListener(Event.ADDED, addedHandler); 
+			window.removeEventListener(Event.REMOVED, removedHandler); 
+			window.systemManager.removeEventListener(Event.REMOVED, removedHandler); 
+			window.removeEventListener(WINDOW_CREATE, nativeAddedHandler); 
+			window.systemManager.removeEventListener(WINDOW_CREATE, nativeAddedHandler); 
+			window.removeEventListener(WINDOW_CLOSE, nativeRemovedHandler); 
+			window.systemManager.removeEventListener(WINDOW_CLOSE, nativeRemovedHandler); 
+			internalRemove(window);
+		}
+		
+		
 		/**
 		 * 	Register a Tide module
 		 * 
@@ -1735,7 +1817,7 @@ package org.granite.tide {
 		    
 		    _objectsInitializing.push({ context: ctx, entity: path ? path.path : obj.entity, propertyName: obj.propertyName });
 		    
-		    getContext().application.callLater(doInitializeObjects, [ctx]);
+		    currentApplication().callLater(doInitializeObjects, [ctx]);
 		}
 		
 		private function doInitializeObjects(ctx:BaseContext):void {

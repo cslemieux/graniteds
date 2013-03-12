@@ -53,14 +53,23 @@ public class GlassFishWebSocketApplication extends WebSocketApplication {
 			connectMessageId = request.getParameters().getParameter("connectId");
 		String clientId = request.getHeader("GDSClientId") != null ? request.getHeader("GDSClientId") : request.getParameters().getParameter("GDSClientId");
 		String sessionId = null;
-		if (request.getHeader("GDSSessionId") != null)
-			sessionId = request.getHeader("GDSSessionId");
-		if (sessionId == null && request.getParameters().getParameter("GDSSessionId") != null)
-			sessionId = request.getParameters().getParameter("GDSSessionId");
+		
+		for (int i = 0; i < request.getCookies().getCookieCount(); i++) {
+			if ("JSESSIONID".equals(request.getCookies().getCookie(i).getName())) {
+				sessionId = request.getCookies().getCookie(i).getValue().getString();
+				break;
+			}
+		}
+		String clientType = null;
+		if (request.getHeader("GDSClientType") != null)
+			clientType = request.getHeader("GDSClientType");
+		if (clientType == null && request.getParameters().getParameter("GDSClientType") != null)
+			clientType = request.getParameters().getParameter("GDSClientType");
 		
 		// Utterly hackish and ugly: we create the thread local here because there is no other way to access the request
 		// It will be cleared in onConnect which executes later in the same thread
-		ServletGraniteContext graniteContext = ServletGraniteContext.createThreadInstance(gravity.getGraniteConfig(), gravity.getServicesConfig(), servletContext, sessionId);
+		ServletGraniteContext graniteContext = ServletGraniteContext.createThreadInstance(gravity.getGraniteConfig(), gravity.getServicesConfig(), 
+				servletContext, sessionId, clientType);
 		if (connectMessageId != null)
 			graniteContext.getRequest().setAttribute("connectId", connectMessageId);
 		if (clientId != null)

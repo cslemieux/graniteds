@@ -130,7 +130,7 @@
                 <dirset dir="classes/core"/>
                 <dirset dir="classes/gravity"/>
                 <pathelement location="lib/jta.jar"/>
-                <pathelement location="lib/jdo2-api-2.3-eb.jar"/>
+                <pathelement location="lib/jdo-api.jar"/>
             	<pathelement location="lib/javassist.jar"/>
             </classpath>
         </javac>
@@ -209,7 +209,7 @@
             <classpath>
                 <path refid="gds.classpath"/>
                 <dirset dir="classes/core"/>
-                <pathelement location="lib/jdo2-api-2.3-eb.jar"/>
+                <pathelement location="lib/jdo-api.jar"/>
                 <pathelement location="lib/openjpa.jar"/>
             </classpath>
         </javac>
@@ -225,9 +225,10 @@
             <classpath>
                 <path refid="gds.classpath"/>
                 <dirset dir="classes/core"/>
-                <pathelement location="lib/jdo2-api-2.3-eb.jar"/>
+                <pathelement location="lib/jdo-api.jar"/>
                 <pathelement location="lib/datanucleus-core.jar"/>
                 <pathelement location="lib/datanucleus-jpa.jar"/>
+                <pathelement location="lib/datanucleus-jdo.jar"/>
             </classpath>
         </javac>
         <copy todir="classes/datanucleus">
@@ -261,7 +262,7 @@
                 <dirset dir="classes/gravity"/>
                 <dirset dir="classes/tide"/>
                 <pathelement location="lib/aspectjweaver-1.5.4.jar"/>
-                <pathelement location="lib/jdo2-api-2.3-eb.jar"/>
+                <pathelement location="lib/jdo-api.jar"/>
                 <pathelement location="lib/org.springframework.core.jar"/>
                 <pathelement location="lib/org.springframework.beans.jar"/>
                 <pathelement location="lib/org.springframework.context.jar"/>
@@ -983,7 +984,11 @@
                 <attribute name="Implementation-Version" value="${GDS_VERSION} (${TODAY})"/>
             </section>
         </manifest>
-
+    	
+    	<copyfile dest="build/flex-websocket-client.swc" src="lib/flex-websocket-client.swc"/>
+        <zip basedir="build" update="true" keepcompression="true"
+            destfile="build/flex-websocket-client.swc" includes="META-INF/MANIFEST.MF"/>
+        
         <!-- Build Swcs and add Manifest -->
         <compc output="build/granite-essentials.swc" use-network="false" warn-missing-namespace-decl="false">
             <source-path path-element="as3/essentials"/>
@@ -1008,6 +1013,9 @@
             <compiler.library-path dir="build" append="true">
                 <include name="granite-essentials.swc" />
             </compiler.library-path>
+        	<compiler.library-path dir="build" append="true">
+        		<include name="flex-websocket-client.swc"/>
+        	</compiler.library-path>
         	<define name="CONFIG::debugging" value="false"/>
             <define name="CONFIG::flex40" value="true"/>
             <define name="CONFIG::flex45" value="false"/>

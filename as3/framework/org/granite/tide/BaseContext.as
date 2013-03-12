@@ -525,7 +525,7 @@ package org.granite.tide {
          *
          *  @param tracking
          */
-        public function set meta_tracking(tracking:Boolean):void {
+        public function meta_setTracking(tracking:Boolean):void {
             _tracking = tracking;
         }
         
@@ -557,6 +557,11 @@ package org.granite.tide {
         public function get meta_dirty():Boolean {
             return _entityManager.dirty;
         }
+		
+		[Bindable(event="dirtyChange")]
+		public function meta_deepDirty(entity:IEntity):Boolean {
+			return _entityManager.isEntityDeepChanged(entity);
+		}
 		
 		/**
 		 * 	Enables or disabled dirty checking in this context
@@ -735,9 +740,13 @@ package org.granite.tide {
 				
 				if (parentContext != null) {
 					var saveTracking:Boolean = parentContext.meta_tracking;
-					parentContext.meta_tracking = false;
-					result = parentContext.meta_getInstance(name, create, forceNoCreate);
-					parentContext.meta_tracking = saveTracking;
+					try {
+						parentContext.meta_setTracking(false);
+						result = parentContext.meta_getInstance(name, create, forceNoCreate);
+					}
+					finally {
+						parentContext.meta_setTracking(saveTracking);
+					}
 				}
             }
             
@@ -935,9 +944,13 @@ package org.granite.tide {
 				
 				if (parentContext != null) {
 					saveTracking = parentContext.meta_tracking;
-					parentContext.meta_tracking = false;
-					parentContext.setProperty(name, value); 
-					parentContext.meta_tracking = saveTracking;
+					try {
+						parentContext.meta_setTracking(false);
+						parentContext.setProperty(name, value);
+					}
+					finally {
+						parentContext.meta_setTracking(saveTracking);
+					}
 					isset = true;
 				}
             }
@@ -956,21 +969,43 @@ package org.granite.tide {
                     // IEventDispatcher(prev).removeEventListener(PropertyChangeEvent.PROPERTY_CHANGE, meta_componentPropertyChangeHandler);
                 }
                 
-                if (prev != null)
+                if (prev != null) {
                     _entityManager.removeReference(prev, null, null, new ContextVariable(n));
+					
+					meta_tide.removeManagedInstance(prev);
+				}
+				
+				if (value != null) {
+					var existing:Array = meta_tide.getManagedInstance(value);
+					if (existing != null)
+						existing[0][existing[1]] = null;
+				}
                 
                 saveTracking = _tracking;
-                _tracking = true;
-                
-                if (base)
-                	base.meta_internalSetProperty(baseName, value);
-                else
-                	super.setProperty(name, value);
-                
-                _tracking = saveTracking;
+				try {
+	                _tracking = true;
+	                
+	                if (base)
+	                	base.meta_internalSetProperty(baseName, value);
+	                else
+	                	super.setProperty(name, value);
+				}
+				finally {
+                	_tracking = saveTracking;
+				}
                 
                 if (value != null) {
                     var n:String = name is QName ? QName(name).localName : name;
+					
+					meta_tide.setManagedInstance(value, this, n);
+					
+					// When forcing a context value in the global context, change the scope of an existing conversation component
+					if (meta_isGlobal() && meta_tide.isComponent(n) && meta_tide.isComponentInConversation(n)) {
+						meta_tide.setComponentScope(n, Tide.SCOPE_SESSION);
+						if (value != prev)
+							dispatchEvent(PropertyChangeEvent.createUpdateEvent(this, n, prev, value));
+					}
+					
                     if (value is IEntity) {
                         // Setup context for entity context variable
                         _entityManager.addReference(value, null, null, new ContextVariable(n));
@@ -1941,11 +1976,14 @@ package org.granite.tide {
          */ 
         public function meta_isEntityChanged(entity:IEntity, propName:String = null, value:* = null):Boolean {
             var saveTracking:Boolean = _tracking;
-            _tracking = false;
-            
-            var dirty:Boolean = _entityManager.isEntityChanged(entity, propName, value);
-            
-            _tracking = saveTracking;
+			try {
+	            _tracking = false;
+	            
+	            var dirty:Boolean = _entityManager.isEntityChanged(entity, propName, value);
+			}
+			finally {
+            	_tracking = saveTracking;
+			}
             return dirty;
         }
         

@@ -31,6 +31,7 @@ package org.granite.tide.collections {
     import mx.data.utils.Managed;
     import mx.events.CollectionEvent;
     import mx.events.CollectionEventKind;
+    import mx.events.PropertyChangeEvent;
     import mx.logging.ILogger;
     import mx.logging.Log;
     import mx.rpc.AsyncToken;
@@ -46,6 +47,7 @@ package org.granite.tide.collections {
     import org.granite.tide.IEntityManager;
     import org.granite.tide.IPropertyHolder;
     import org.granite.tide.IWrapper;
+    import org.granite.tide.data.EntityManager;
 
 
     use namespace flash_proxy;
@@ -66,9 +68,6 @@ package org.granite.tide.collections {
         
         private static var log:ILogger = Log.getLogger("org.granite.tide.collections.PersistentMap");
 		
-		public static const INITIALIZE:String = "initialize";
-		public static const UNINITIALIZE:String = "uninitialize";
-		
 	    private var _entity:IEntity = null;
 	    private var _propertyName:String = null;
 		private var _lazy:Boolean = false;
@@ -76,7 +75,7 @@ package org.granite.tide.collections {
 	
 	    private var _localInitializing:Boolean = false;
         private var _itemPendingError:ItemPendingError = null;
-        private var _initializationCallbacks:Array = null;
+		private var _initializationCallbacks:Array = null;
 	    
 	    
         public function get entity():Object {
@@ -145,15 +144,15 @@ package org.granite.tide.collections {
                 _itemPendingError = null;
             }
                         
-            if (_initializationCallbacks != null) {
-                for each (var f:Function in _initializationCallbacks)
-                    f(this);            	
-
-            	_initializationCallbacks = null;
-            }
+			if (_initializationCallbacks != null) {
+				for each (var callback:Function in _initializationCallbacks)
+					callback(this);
+				_initializationCallbacks = null;
+			}
             
             dispatchEvent(new CollectionEvent(CollectionEvent.COLLECTION_CHANGE, false, false, CollectionEventKind.REFRESH));            
-			dispatchEvent(new CollectionEvent(CollectionEvent.COLLECTION_CHANGE, false, false, INITIALIZE));
+			dispatchEvent(new CollectionEvent(CollectionEvent.COLLECTION_CHANGE, false, false, EntityManager.INITIALIZE));
+			entity.dispatchEvent(new PropertyChangeEvent(EntityManager.LOAD_STATE_CHANGE, false, false, EntityManager.INITIALIZE, propertyName, null, _map, entity));
 			
             log.debug("initialized");
         }
@@ -165,7 +164,10 @@ package org.granite.tide.collections {
             _localInitializing = false;
             
             dispatchEvent(new CollectionEvent(CollectionEvent.COLLECTION_CHANGE, false, false, CollectionEventKind.RESET));			
-			dispatchEvent(new CollectionEvent(CollectionEvent.COLLECTION_CHANGE, false, false, UNINITIALIZE));
+			dispatchEvent(new CollectionEvent(CollectionEvent.COLLECTION_CHANGE, false, false, EntityManager.UNINITIALIZE));
+			entity.dispatchEvent(new PropertyChangeEvent(EntityManager.LOAD_STATE_CHANGE, false, false, EntityManager.UNINITIALIZE, propertyName, null, _map, entity));
+			
+			log.debug("uninitialized");
         }
         
         
@@ -177,10 +179,9 @@ package org.granite.tide.collections {
 			if (isInitialized())
 				callback(this);
 			else {
-                                if (_initializationCallbacks == null)
-                                    _initializationCallbacks = new Array();
+				if (_initializationCallbacks == null)
+					_initializationCallbacks = [];
 				_initializationCallbacks.push(callback);
-				requestInitialization();
 			}
 		}
 		
