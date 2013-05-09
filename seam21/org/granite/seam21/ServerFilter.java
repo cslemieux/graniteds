@@ -82,7 +82,10 @@ public class ServerFilter extends AbstractFilter {
     private List<Class<? extends ExceptionConverter>> exceptionConverters = null;
     private AMF3MessageInterceptor amf3MessageInterceptor = null;
     private boolean tide = false;
+    private String type = "server";
     
+    private AMFEndpoint amfEndpoint = null;
+
     
     public ServerFilter() {
     	super();
@@ -91,11 +94,27 @@ public class ServerFilter extends AbstractFilter {
     
     
     @Override
-    public void init(FilterConfig config) {
+    public void init(FilterConfig config) throws ServletException {
+    	super.init(config);
+    	
     	this.config = config;
+    	
+    	this.amfEndpoint = new AMFEndpoint();
+    	this.amfEndpoint.init(config.getServletContext());
     }
 	
     
+	@Override
+	public void destroy() {
+		super.destroy();
+		
+		this.config = null;
+		
+		this.amfEndpoint.destroy();
+		this.amfEndpoint = null;
+	}
+
+
 	@Create
 	public void seamInit() {
 		Seam21GraniteConfig seam21GraniteConfig = (Seam21GraniteConfig)Component.getInstance(Seam21GraniteConfig.class, true);
@@ -176,11 +195,11 @@ public class ServerFilter extends AbstractFilter {
         		service = new Service("granite-service", "flex.messaging.services.RemotingService", 
         			"flex.messaging.messages.RemotingMessage", null, null, new HashMap<String, Destination>());
         	}
-        	Destination destination = servicesConfig.findDestinationById("flex.messaging.messages.RemotingMessage", "seam");
+        	Destination destination = servicesConfig.findDestinationById("flex.messaging.messages.RemotingMessage", type);
         	if (destination == null) {
         		List<String> channelIds = new ArrayList<String>();
         		channelIds.add("graniteamf");
-        		destination = new Destination("seam", channelIds, new XMap(), tideRoles, null, null);
+        		destination = new Destination(type, channelIds, new XMap(), tideRoles, null, null);
         		destination.getProperties().put("factory", factory.getId());
         		destination.getProperties().put("validator-name", "tideValidator");
         		service.getDestinations().put(destination.getId(), destination);
@@ -235,12 +254,18 @@ public class ServerFilter extends AbstractFilter {
 		this.tide = tide;
 	}
 	
+	public void setType(String type) {
+		this.type = type;
+	}
+	
 	
 	public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) 
      	throws IOException, ServletException {
 		if (isMappedToCurrentRequestPath(request)) {         
-			AMFEndpoint.service(graniteConfig, servicesConfig, config.getServletContext(), 
-					(HttpServletRequest)request, (HttpServletResponse)response);
+			amfEndpoint.service(
+				graniteConfig, servicesConfig, config.getServletContext(), 
+				(HttpServletRequest)request, (HttpServletResponse)response
+			);
 		}
 		else { 
 			chain.doFilter(request, response);

@@ -40,6 +40,7 @@ import org.granite.logging.Logger;
 import org.granite.messaging.amf.io.convert.Converter;
 import org.granite.messaging.amf.process.AMF3MessageInterceptor;
 import org.granite.messaging.service.ExceptionConverter;
+import org.granite.messaging.service.security.RemotingDestinationSecurizer;
 import org.granite.messaging.service.security.SecurityService;
 import org.granite.messaging.service.tide.TideComponentAnnotatedWithMatcher;
 import org.granite.messaging.service.tide.TideComponentInstanceOfMatcher;
@@ -49,7 +50,9 @@ import org.granite.messaging.webapp.AMFEndpoint;
 import org.granite.util.TypeUtil;
 import org.granite.util.XMap;
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.web.context.ServletContextAware;
@@ -57,12 +60,14 @@ import org.springframework.web.servlet.HandlerAdapter;
 import org.springframework.web.servlet.ModelAndView;
 
 
-public class ServerFilter implements InitializingBean, ApplicationContextAware, ServletContextAware, HandlerAdapter {
+public class ServerFilter implements InitializingBean, DisposableBean, ApplicationContextAware, ServletContextAware, HandlerAdapter {
 	
     private static final Logger log = Logger.getLogger(ServerFilter.class);
 	
-    private ApplicationContext context = null;
+    @Autowired(required=false)
     private ServletContext servletContext = null;
+    private ApplicationContext context = null;
+    
     private GraniteConfig graniteConfig = null;
     private ServicesConfig servicesConfig = null;
     
@@ -74,7 +79,9 @@ public class ServerFilter implements InitializingBean, ApplicationContextAware, 
     private List<Class<? extends ExceptionConverter>> exceptionConverters = null;
     private AMF3MessageInterceptor amf3MessageInterceptor;
     private boolean tide = false;
+    private String type = "server";
     
+    private AMFEndpoint amfEndpoint = null;
 
 	public void setApplicationContext(ApplicationContext context) throws BeansException {
 		this.context = context;
@@ -183,18 +190,29 @@ public class ServerFilter implements InitializingBean, ApplicationContextAware, 
         		service = new Service("granite-service", "flex.messaging.services.RemotingService", 
         			"flex.messaging.messages.RemotingMessage", null, null, new HashMap<String, Destination>());
         	}
-        	Destination destination = servicesConfig.findDestinationById("flex.messaging.messages.RemotingMessage", "spring");
+        	Destination destination = servicesConfig.findDestinationById("flex.messaging.messages.RemotingMessage", type);
         	if (destination == null) {
         		List<String> channelIds = new ArrayList<String>();
         		channelIds.add("graniteamf");
-        		destination = new Destination("spring", channelIds, new XMap(), tideRoles, null, null);
+        		destination = new Destination(type, channelIds, new XMap(), tideRoles, null, null);
         		destination.getProperties().put("factory", factory.getId());
         		destination.getProperties().put("validator-name", "tideValidator");
         		service.getDestinations().put(destination.getId(), destination);
         		servicesConfig.addService(service);
         	}
         	
-        	log.info("Registered Tide/Spring service factory and destination");
+        	if (destination.getSecurizer() == null) {
+                Map<String, RemotingDestinationSecurizer> securizers = context.getBeansOfType(RemotingDestinationSecurizer.class);
+                if (securizers.size() > 1)
+                	log.error("More than one Remoting Destination Securizer bean defined");
+                else if (!securizers.isEmpty()) {
+                	log.debug("Remoting Destination Securizer bean " + securizers.keySet().iterator().next() + " selected");
+                	RemotingDestinationSecurizer securizer = securizers.values().iterator().next();
+                	destination.setSecurizer(securizer);
+                }
+        	}
+        	
+        	log.info("Registered Tide/Spring service factory and destination %s", type);
         }
         else {
         	Factory factory = servicesConfig.findFactoryById("spring-factory");
@@ -214,8 +232,16 @@ public class ServerFilter implements InitializingBean, ApplicationContextAware, 
         	
         	log.info("Registered Spring service factory");
         }
+        
+        amfEndpoint = new AMFEndpoint();
+        amfEndpoint.init(servletContext);
 	}
 	
+	public void destroy() throws Exception {
+		amfEndpoint.destroy();
+		amfEndpoint = null;
+	}
+
 	public void setTideRoles(List<String> tideRoles) {
 		this.tideRoles = tideRoles;
 	}
@@ -248,13 +274,17 @@ public class ServerFilter implements InitializingBean, ApplicationContextAware, 
 		this.tide = tide;
 	}
 	
+	public void setType(String type) {
+		this.type = type;
+	}
+	
 	
 	public long getLastModified(HttpServletRequest request, Object handler) {
 		return -1;
 	}
 	
     public ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-		AMFEndpoint.service(graniteConfig, servicesConfig, servletContext, request, response);
+    	amfEndpoint.service(graniteConfig, servicesConfig, servletContext, request, response);
 		return null;
     }
 

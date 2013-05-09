@@ -164,7 +164,7 @@
                 <path refid="gds.classpath"/>
                 <dirset dir="classes/core"/>
                 <dirset dir="classes/tide"/>
-                <pathelement location="lib/hibernate-core-4.0.0.jar"/>
+                <pathelement location="lib/hibernate-core-4.0.1.jar"/>
             </classpath>
         </javac>
         <copy todir="classes/hibernate4">
@@ -263,6 +263,7 @@
                 <dirset dir="classes/tide"/>
                 <pathelement location="lib/aspectjweaver-1.5.4.jar"/>
                 <pathelement location="lib/jdo-api.jar"/>
+                <pathelement location="lib/jpa-2.0-api.jar"/>
                 <pathelement location="lib/org.springframework.core.jar"/>
                 <pathelement location="lib/org.springframework.beans.jar"/>
                 <pathelement location="lib/org.springframework.context.jar"/>
@@ -271,6 +272,7 @@
                 <pathelement location="lib/org.springframework.orm.jar"/>
                 <pathelement location="lib/org.springframework.web.jar"/>
                 <pathelement location="lib/org.springframework.web.servlet.jar"/>
+                <pathelement location="lib/hibernate-core-4.0.1.jar"/>
                 <pathelement location="lib/spring-data-commons-core.jar"/>
                 <pathelement location="lib/spring-data-jpa.jar"/>
                 <pathelement location="lib/spring-security-core-3.0.jar"/>
@@ -862,7 +864,7 @@
             	<exclude name="org/granite/config/flex/Servlet*"/>
             	<exclude name="org/granite/config/servlet3/**"/>
             	<exclude name="org/granite/messaging/amf/process/*Processor.class"/>
-            	<exclude name="org/granite/messaging/persistence/**"/>
+            	<exclude name="org/granite/messaging/persistence/*Externalizable*.class"/>
             	<exclude name="org/granite/messaging/webapp/**"/>
             	<exclude name="org/granite/osgi/**"/>
             	<exclude name="META-INF/**"/>

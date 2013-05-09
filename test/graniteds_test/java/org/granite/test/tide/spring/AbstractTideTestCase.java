@@ -12,7 +12,9 @@ import org.granite.config.api.Configuration;
 import org.granite.config.api.internal.ConfigurationImpl;
 import org.granite.config.flex.ServicesConfig;
 import org.granite.config.flex.ServletServicesConfig;
+import org.granite.gravity.Gravity;
 import org.granite.messaging.webapp.HttpGraniteContext;
+import org.granite.spring.ServerFilter;
 import org.granite.test.gravity.MockGravity;
 import org.granite.tide.TideServiceInvoker;
 import org.granite.tide.invocation.ContextResult;
@@ -73,11 +75,21 @@ public class AbstractTideTestCase implements ApplicationContextAware {
         springServiceFactory = new SpringServiceFactory();
         springServiceFactory.configure(new XMap("properties"));
         springServiceFactory.setApplicationContext(applicationContext);
+        
+        applicationContext.getBean(ServerFilter.class).setServletContext(servletContext);
+    }
+    
+    protected void initGravity() {
+    	servletContext.setAttribute(Gravity.class.getName(), mockGravity);
     }
     
     
     protected Message getLastMessage() {
     	return mockGravity.getLastMessage();
+    }
+    
+    protected void reset() {
+    	
     }
     
     protected InvocationResult invokeComponent(String componentName, Class<?> componentClass, String operation, Object[] params) {
@@ -90,7 +102,7 @@ public class AbstractTideTestCase implements ApplicationContextAware {
     
     protected InvocationResult invokeComponent(String componentName, Class<?> componentClass, String operation, Object[] params, String[] listeners, Object[] updates, String[] results, String conversationId) {
         RemotingMessage callMessage = new RemotingMessage();
-        callMessage.setDestination("spring");
+        callMessage.setDestination("server");
         callMessage.setOperation("invokeComponent");
         Object[] args = new Object[5];
         args[0] = componentName;
@@ -131,7 +143,7 @@ public class AbstractTideTestCase implements ApplicationContextAware {
     @SuppressWarnings("unchecked")
 	public Object initializeObject(Object entity, String[] fetch) {
         RemotingMessage callMessage = new RemotingMessage();
-        callMessage.setDestination("spring");
+        callMessage.setDestination("server");
         callMessage.setOperation("initializeObject");
         Object[] args = new Object[2];
         args[0] = entity;

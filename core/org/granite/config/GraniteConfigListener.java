@@ -59,6 +59,7 @@ import org.granite.messaging.amf.process.AMF3MessageInterceptor;
 import org.granite.messaging.service.ExceptionConverter;
 import org.granite.messaging.service.ServiceFactory;
 import org.granite.messaging.service.SimpleServiceFactory;
+import org.granite.messaging.service.security.RemotingDestinationSecurizer;
 import org.granite.messaging.service.security.SecurityService;
 import org.granite.messaging.service.tide.TideComponentAnnotatedWithMatcher;
 import org.granite.messaging.service.tide.TideComponentInstanceOfMatcher;
@@ -75,7 +76,8 @@ import org.granite.util.XMap;
 public class GraniteConfigListener implements ServletContextListener, HttpSessionListener {
 
     private static final String GRANITE_CONFIG_SHUTDOWN_KEY = GraniteConfig.class.getName() + "_SHUTDOWN";
-    public static final String GRANITE_CONFIG_ATTRIBUTE = "org.granite.config.flexFilter";
+    public static final String GRANITE_CONFIG_ATTRIBUTE = "org.granite.config.serverFilter";
+    public static final String GRANITE_CONFIG_PROVIDER_ATTRIBUTE = "org.granite.config.configProvider";
     public static final String GRANITE_MBEANS_ATTRIBUTE = "registerGraniteMBeans";
     
     public static final String GRANITE_SESSION_TRACKING = "org.granite.config.sessionTracking";
@@ -89,15 +91,15 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
 
             log.info("Initializing GraniteDS...");
             
-            Class<?> flexFilterClass = (Class<?>)context.getAttribute(GRANITE_CONFIG_ATTRIBUTE);
-            if (flexFilterClass != null)
+            Class<?> serverFilterClass = (Class<?>)context.getAttribute(GRANITE_CONFIG_ATTRIBUTE);
+            if (serverFilterClass != null)
             	context.setAttribute(ServletGraniteConfig.GRANITE_CONFIG_DEFAULT_KEY, "org/granite/config/servlet3/granite-config-servlet3.xml");
             
             GraniteConfig gConfig = ServletGraniteConfig.loadConfig(context);
             ServletServicesConfig.loadConfig(context);
             
-            if (flexFilterClass != null)
-            	configureServices(context, flexFilterClass);
+            if (serverFilterClass != null)
+            	configureServices(context, serverFilterClass);
             
             if ("true".equals(sce.getServletContext().getInitParameter(GRANITE_SESSION_TRACKING))) {
 	            Map<String, HttpSession> sessionMap = new ConcurrentHashMap<String, HttpSession>(200);
@@ -151,23 +153,25 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
     }
     
     
-    private void configureServices(ServletContext context, Class<?> flexFilterClass) throws ServletException {
-        GraniteConfig graniteConfig = ServletGraniteConfig.loadConfig(context);
-        ServicesConfig servicesConfig = ServletServicesConfig.loadConfig(context);
+    private void configureServices(ServletContext servletContext, Class<?> serverFilterClass) throws ServletException {
+        GraniteConfig graniteConfig = ServletGraniteConfig.loadConfig(servletContext);
+        ServicesConfig servicesConfig = ServletServicesConfig.loadConfig(servletContext);
     	
-        ServerFilter flexFilter = flexFilterClass.getAnnotation(ServerFilter.class);
+        ServerFilter serverFilter = serverFilterClass.getAnnotation(ServerFilter.class);
         
         ConfigProvider configProvider = null;
         
-        boolean useTide = flexFilter.tide();
-        String type = flexFilter.type();
+        boolean useTide = serverFilter.tide();
+        String type = serverFilter.type();
         Class<?> factoryClass = null;
-        Set<Class<?>> tideInterfaces = new HashSet<Class<?>>(Arrays.asList(flexFilter.tideInterfaces()));
-        Set<Class<? extends Annotation>> tideAnnotations = new HashSet<Class<? extends Annotation>>(Arrays.asList(flexFilter.tideAnnotations()));
+        Set<Class<?>> tideInterfaces = new HashSet<Class<?>>(Arrays.asList(serverFilter.tideInterfaces()));
+        Set<Class<? extends Annotation>> tideAnnotations = new HashSet<Class<? extends Annotation>>(Arrays.asList(serverFilter.tideAnnotations()));
         
-        if (!flexFilter.configProviderClass().equals(ConfigProvider.class)) {
+        if (!serverFilter.configProviderClass().equals(ConfigProvider.class)) {
         	try {
-        		configProvider = TypeUtil.newInstance(flexFilter.configProviderClass(), new Class[] { ServletContext.class }, new Object[] { context });
+        		configProvider = TypeUtil.newInstance(serverFilter.configProviderClass(), new Class[] { ServletContext.class }, new Object[] { servletContext });
+        		
+        		servletContext.setAttribute(GRANITE_CONFIG_PROVIDER_ATTRIBUTE, configProvider);
         		
         		if (configProvider.useTide() != null)
         			useTide = configProvider.useTide();
@@ -184,12 +188,12 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
         			tideAnnotations.addAll(Arrays.asList(configProvider.getTideAnnotations()));
 			}
 			catch (Exception e) {
-				log.error(e, "Could not set config provider of type %s", flexFilter.configProviderClass().getName());
+				log.error(e, "Could not set config provider of type %s", serverFilter.configProviderClass().getName());
 			}
         }
         
-        if (!flexFilter.factoryClass().equals(ServiceFactory.class))
-        	factoryClass = flexFilter.factoryClass();
+        if (!serverFilter.factoryClass().equals(ServiceFactory.class))
+        	factoryClass = serverFilter.factoryClass();
         
         if (factoryClass == null) {
         	factoryClass = SimpleServiceFactory.class;
@@ -214,7 +218,7 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
     			log.error(e, "Could not add tide-component annotation %s", ta);
     		}
     	}
-    	for (String tn : flexFilter.tideNames()) {
+    	for (String tn : serverFilter.tideNames()) {
     		try {
     			graniteConfig.getTideComponentMatchers().add(new TideComponentNameMatcher(tn, false));
     			log.debug("Enabled components with name %s for Tide remoting", tn);
@@ -223,7 +227,7 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
     			log.error(e, "Could not add tide-component name %s", tn);
     		}
     	}
-    	for (String tt : flexFilter.tideTypes()) {
+    	for (String tt : serverFilter.tideTypes()) {
     		try {
     			graniteConfig.getTideComponentMatchers().add(new TideComponentTypeMatcher(tt, false));
     			log.debug("Enabled components with type %s for Tide remoting", tt);
@@ -233,7 +237,7 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
     		}
     	}
         
-    	for (Class<? extends ExceptionConverter> ec : flexFilter.exceptionConverters()) {
+    	for (Class<? extends ExceptionConverter> ec : serverFilter.exceptionConverters()) {
     		graniteConfig.registerExceptionConverter(ec, true);
 			log.debug("Registered exception converter %s", ec);
     	}
@@ -244,18 +248,18 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
     		}
     	}
     	
-    	if (flexFilter.useBigDecimal())
+    	if (serverFilter.useBigDecimal())
     		graniteConfig.setExternalizersByType(BigDecimal.class.getName(), BigDecimalExternalizer.class.getName());
     	
-    	if (flexFilter.useBigInteger())
+    	if (serverFilter.useBigInteger())
     		graniteConfig.setExternalizersByType(BigInteger.class.getName(), BigIntegerExternalizer.class.getName());
     	
-    	if (flexFilter.useLong())
+    	if (serverFilter.useLong())
     		graniteConfig.setExternalizersByType(Long.class.getName(), LongExternalizer.class.getName());
     	
-    	if (!flexFilter.securityServiceClass().equals(SecurityService.class)) {
+    	if (!serverFilter.securityServiceClass().equals(SecurityService.class)) {
     		try {
-    			graniteConfig.setSecurityService(TypeUtil.newInstance(flexFilter.securityServiceClass(), SecurityService.class));
+    			graniteConfig.setSecurityService(TypeUtil.newInstance(serverFilter.securityServiceClass(), SecurityService.class));
         	}
         	catch (Exception e) {
         		throw new ServletException("Could not setup security service", e);
@@ -301,9 +305,9 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
     		}
     	}
         
-        if (!flexFilter.amf3MessageInterceptor().equals(AMF3MessageInterceptor.class)) {
+        if (!serverFilter.amf3MessageInterceptor().equals(AMF3MessageInterceptor.class)) {
         	try {
-        		graniteConfig.setAmf3MessageInterceptor(TypeUtil.newInstance(flexFilter.amf3MessageInterceptor(), AMF3MessageInterceptor.class));
+        		graniteConfig.setAmf3MessageInterceptor(TypeUtil.newInstance(serverFilter.amf3MessageInterceptor(), AMF3MessageInterceptor.class));
         	}
         	catch (Exception e) {
         		throw new ServletException("Could not setup amf3 message interceptor", e);
@@ -328,21 +332,21 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
 	    	lookup = "java:global/{context.root}/{capitalized.component.name}Bean";
 	    	if (isJBoss6())
 	    		lookup = "{capitalized.component.name}Bean/local";
-	    	if (!("".equals(flexFilter.ejbLookup())))
-	    		lookup = flexFilter.ejbLookup();
+	    	if (!("".equals(serverFilter.ejbLookup())))
+	    		lookup = serverFilter.ejbLookup();
         }
         else {
 	    	lookup = "java:global/{context.root}/{capitalized.destination.id}Bean";
 	    	if (isJBoss6())
 	    		lookup = "{capitalized.destination.id}Bean/local";
-	    	if (!("".equals(flexFilter.ejbLookup())))
-	    		lookup = flexFilter.ejbLookup();
+	    	if (!("".equals(serverFilter.ejbLookup())))
+	    		lookup = serverFilter.ejbLookup();
         }
     	if (lookup.indexOf("{context.root}") >= 0) {
     		try {
     			// Call by reflection because of JDK 1.4
-    			Method m = context.getClass().getMethod("getContextPath");
-    			String contextPath = (String)m.invoke(context);
+    			Method m = servletContext.getClass().getMethod("getContextPath");
+    			String contextPath = (String)m.invoke(servletContext);
     			lookup = lookup.replace("{context.root}", contextPath.substring(1));
     		}
     		catch (Exception e) {
@@ -364,16 +368,22 @@ public class GraniteConfigListener implements ServletContextListener, HttpSessio
         				"flex.messaging.messages.RemotingMessage", null, null, new HashMap<String, Destination>());
 	        	List<String> channelIds = new ArrayList<String>();
 	        	channelIds.add("graniteamf");
-	        	List<String> tideRoles = flexFilter.tideRoles().length == 0 ? null : Arrays.asList(flexFilter.tideRoles());
+	        	List<String> tideRoles = serverFilter.tideRoles().length == 0 ? null : Arrays.asList(serverFilter.tideRoles());
 	        	Destination destination = new Destination(type, channelIds, new XMap(), tideRoles, null, null);
 	        	destination.getProperties().put("factory", "tide-" + type + "-factory");
-	        	if (!("".equals(flexFilter.entityManagerFactoryJndiName())))
-	        		destination.getProperties().put("entity-manager-factory-jndi-name", flexFilter.entityManagerFactoryJndiName());
-	        	else if (!("".equals(flexFilter.entityManagerJndiName())))
-	        		destination.getProperties().put("entity-manager-jndi-name", flexFilter.entityManagerJndiName());
-	        	if (!("".equals(flexFilter.validatorClassName())))
-	        		destination.getProperties().put("validator-class-name", flexFilter.validatorClassName());
+	        	if (!("".equals(serverFilter.entityManagerFactoryJndiName())))
+	        		destination.getProperties().put("entity-manager-factory-jndi-name", serverFilter.entityManagerFactoryJndiName());
+	        	else if (!("".equals(serverFilter.entityManagerJndiName())))
+	        		destination.getProperties().put("entity-manager-jndi-name", serverFilter.entityManagerJndiName());
+	        	if (!("".equals(serverFilter.validatorClassName())))
+	        		destination.getProperties().put("validator-class-name", serverFilter.validatorClassName());
 	        	service.getDestinations().put(type, destination);
+	        	
+	        	if (destination.getSecurizer() == null && configProvider != null) {
+                	RemotingDestinationSecurizer securizer = configProvider.findInstance(RemotingDestinationSecurizer.class);
+                	destination.setSecurizer(securizer);
+	        	}
+	        	
 	        	servicesConfig.addService(service);
         	}
             

@@ -76,7 +76,7 @@ package org.granite.tide.cdi {
 		}
 		
 		public static function getInstance(destination:String = null):Cdi {
-			return Tide.getInstance(destination != null ? destination : "cdi", Cdi) as Cdi;
+			return Tide.getInstance(destination != null ? destination : "server", Cdi) as Cdi;
 		}
 		
 		/**
@@ -133,8 +133,13 @@ package org.granite.tide.cdi {
         
         public override function isLoggedInSuccessHandler(sourceContext:BaseContext, sourceModulePrefix:String, data:Object, componentName:String = null, op:String = null, tideResponder:ITideResponder = null, componentResponder:ComponentResponder = null):void {
 			if (componentName == IDENTITY_NAME) {
+				var wasLoggedIn:Boolean = getCdiContext()[IDENTITY_NAME].loggedIn;
+				
 				getCdiContext()[IDENTITY_NAME].username = data.result.result as String;
 				getCdiContext()[IDENTITY_NAME].loggedIn = data.result.result != null;
+				
+				if (!getCdiContext()[IDENTITY_NAME].loggedIn && wasLoggedIn)
+					sessionExpired(sourceContext);
 			}
         	
         	super.isLoggedInSuccessHandler(sourceContext, sourceModulePrefix, data, componentName, op, tideResponder, componentResponder);

@@ -74,7 +74,7 @@ package org.granite.tide.spring {
 		}
 		
 		public static function getInstance(destination:String = null):Spring {
-			return Tide.getInstance(destination != null ? destination : "spring", Spring) as Spring;
+			return Tide.getInstance(destination != null ? destination : "server", Spring) as Spring;
 		}
 		
 		/**
@@ -121,8 +121,13 @@ package org.granite.tide.spring {
 		}
         
         public override function isLoggedInSuccessHandler(sourceContext:BaseContext, sourceModulePrefix:String, data:Object, componentName:String = null, op:String = null, tideResponder:ITideResponder = null, componentResponder:ComponentResponder = null):void {
+			var wasLoggedIn:Boolean = getSpringContext().identity.loggedIn;
+			
         	getSpringContext().identity.username = data.result.result as String;
         	getSpringContext().identity.loggedIn = data.result.result != null;
+			
+			if (!getSpringContext().identity.loggedIn && wasLoggedIn)
+				sessionExpired(sourceContext);
         	
         	super.isLoggedInSuccessHandler(sourceContext, sourceModulePrefix, data, componentName, op, tideResponder, componentResponder);
         }

@@ -20,7 +20,6 @@
 
 package org.granite.tide.hibernate;
 
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.granite.tide.validators.EntityValidator;
@@ -30,7 +29,7 @@ import org.hibernate.validator.InvalidValue;
 
 public class HibernateValidator implements EntityValidator {
     
-    private Map<Class<?>, ClassValidator<?>> validators = new ConcurrentHashMap<Class<?>, ClassValidator<?>>(20);
+    private ConcurrentHashMap<Class<?>, ClassValidator<?>> validators = new ConcurrentHashMap<Class<?>, ClassValidator<?>>(20);
     
     
     public HibernateValidator() {
@@ -42,7 +41,9 @@ public class HibernateValidator implements EntityValidator {
         ClassValidator<?> validator = validators.get(entityClass);
         if (validator == null) {
             validator = new ClassValidator(entityClass);
-            validators.put(entityClass, validator);
+            ClassValidator<?> tmpValidator = validators.putIfAbsent(entityClass, validator); 
+            if (tmpValidator != null) 
+            	validator = tmpValidator; 
         }
         
         org.hibernate.validator.InvalidValue[] invalidValues = validator.getPotentialInvalidValues(propertyName, value);

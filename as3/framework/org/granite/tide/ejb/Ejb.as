@@ -73,7 +73,7 @@ package org.granite.tide.ejb {
 		}
 		
 		public static function getInstance(destination:String = null):Ejb {
-			return Tide.getInstance(destination != null ? destination : "ejb", Ejb) as Ejb;
+			return Tide.getInstance(destination != null ? destination : "server", Ejb) as Ejb;
 		}
 		
 		/**
@@ -121,8 +121,13 @@ package org.granite.tide.ejb {
 		}
         
         public override function isLoggedInSuccessHandler(sourceContext:BaseContext, sourceModulePrefix:String, data:Object, componentName:String = null, op:String = null, tideResponder:ITideResponder = null, componentResponder:ComponentResponder = null):void {
+			var wasLoggedIn:Boolean = getEjbContext().identity.loggedIn;
+			
         	getEjbContext().identity.username = data.result.result as String;
         	getEjbContext().identity.loggedIn = data.result.result != null;
+			
+			if (!getEjbContext().identity.loggedIn && wasLoggedIn)
+				sessionExpired(sourceContext);
         	
         	super.isLoggedInSuccessHandler(sourceContext, sourceModulePrefix, data, componentName, op, tideResponder, componentResponder);
         }
