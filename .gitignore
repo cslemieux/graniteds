@@ -26,3 +26,4 @@ obj/*
 *.swp
 *~
 
+/auth.properties

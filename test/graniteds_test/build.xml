@@ -197,6 +197,10 @@
         <path refid="granite.jar"/>
         <path refid="granite-hibernate.jar"/>
     </path>
+    <path id="gds.hibernate4.classpath">
+        <path refid="hibernate4.jar"/>
+        <path refid="granite-hibernate4.jar"/>
+    </path>
     <path id="gds.test.classpath">
         <pathelement location="${gds.test}/lib/junit-4.8.2.jar"/>
         <path refid="main.jar"/>
@@ -239,7 +243,7 @@
         <mkdir dir="classes"/>
         <mkdir dir="test-reports/java"/>
     	
-        <javac destdir="classes" srcdir="java" debug="true"
+        <javac destdir="classes" srcdir="java" debug="true" excludes="**/*Hibernate4*"
             target="1.5" source="1.5">
             <classpath>
                 <path refid="gds.classpath"/>
@@ -268,10 +272,10 @@
         </copy>
     	<!-- Second compilation with Hibernate 4 -->
         <mkdir dir="classesh4"/>
-        <javac destdir="classesh4" srcdir="java" debug="true"
+        <javac destdir="classesh4" srcdir="java" debug="true" excludes="**/*Hibernate3*"
             target="1.5" source="1.5">
             <classpath>
-                <path refid="hibernate4.jar"/>
+                <path refid="gds.hibernate4.classpath"/>
                 <path refid="gds.classpath"/>
                 <path refid="gds.seam.classpath"/>
                 <path refid="gds.spring.classpath"/>

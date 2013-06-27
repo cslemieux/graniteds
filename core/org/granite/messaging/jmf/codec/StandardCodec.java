@@ -35,7 +35,7 @@ public interface StandardCodec<T> extends JMFConstants {
 
 	int getObjectType();
 	
-	void encode(OutputContext ctx, T v) throws IOException, IllegalAccessException;
+	void encode(OutputContext ctx, T v) throws IOException, IllegalAccessException, InvocationTargetException;
 	
 	T decode(InputContext ctx, int parameterizedJmfType)
 		throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException,

@@ -343,15 +343,10 @@ package org.granite.tide.data {
 		 *  Internal implementation of object detach
 		 * 
 		 *  @param object object
-		 *  @param cache internal cache to avoid graph loops
 		 */ 
-		public function detach(object:Object, cache:Dictionary, forceRemove:Boolean = false):void {
+		private function detach(object:Object):void {
 			if (object == null || isSimple(object))
 				return;
-			
-			if (cache[object] != null)
-				return;
-			cache[object] = object;
 			
 			var excludes:Array = [ 'uid' ];
 			if (object is IEntity) {
@@ -366,37 +361,14 @@ package org.granite.tide.data {
 			var p:String, val:Object;
 			
 			if (object is IEntity && _entityReferences[object] == null) {
-				detachEntity(IEntity(object), true, forceRemove);
-
+				// Entity does not have any more references, detach from the context
+				detachEntity(IEntity(object), true, true);
+				
+				// Delete references from removed entities to other objects 
 				for each (p in cinfo.properties) {
 					val = object[p];
 					
 					removeReference(val, object, p);
-				}
-			}
-			
-			for each (p in cinfo.properties) {
-				val = object[p];
-				
-				if (val is IList && !(val is IPersistentCollection && !IPersistentCollection(val).isInitialized())) {
-					var coll:IList = IList(val);
-					for each (var o:Object in coll)
-						detach(o, cache, forceRemove);
-				}
-				else if (val is IMap && !(val is IPersistentCollection && !IPersistentCollection(val).isInitialized())) {
-					var map:IMap = IMap(val);
-					for each (var key:Object in map.keySet) {
-						var value:Object = map.get(key);
-						detach(key, cache, forceRemove);
-						detach(value, cache, forceRemove);
-					}
-				}
-				else if (val is Array) {
-					for each (var e:Object in val)
-						detach(e, cache, forceRemove);
-				}
-				else if (val != null && !isSimple(val)) {
-					detach(val, cache, forceRemove);
 				}
 			}
 		}
@@ -767,7 +739,7 @@ package org.granite.tide.data {
 	            
 	            _mergeContext.mergeUpdate = saveMergeUpdate;
 	            
-	            if ((_mergeContext.mergeUpdate || forceUpdate) && setter != null && parent != null && propertyName != null && parent is IManaged) {
+	            if ((_mergeContext.mergeUpdate || forceUpdate || fromCache) && setter != null && parent != null && propertyName != null && parent is IManaged) {
 	            	if (!_mergeContext.resolvingConflict || propertyName != _context.meta_tide.getEntityDescriptor(IEntity(parent)).versionPropertyName) {
 		                setter(next);
 		                Managed.setProperty(IManaged(parent), propertyName, previous, next);
@@ -1438,14 +1410,14 @@ package org.granite.tide.data {
             for each (var removal:Object in removals) {
                 var entity:Object = getCachedObject(removal, true);
                 if (entity == null) {
-					log.debug("Entity to remove not found {0}:{1}", removal.className, removal.uid);
+					log.debug("Entity to remove not found {0}:{1}", removal is IEntityRef ? removal.className : getQualifiedClassName(removal), removal.uid);
                     continue;
 				}
-
+				
                 if (_mergeContext.externalData && !_mergeContext.resolvingConflict && _dirtyCheckContext.isEntityChanged(IEntity(entity))) {
                     // Conflict between externally received data and local modifications
                     log.error("conflict with external data removal detected on {0}", BaseContext.toString(entity));
-
+					
                     _mergeContext.addConflict(entity as IEntity, null);
                 }
                 else {
@@ -1485,7 +1457,7 @@ package org.granite.tide.data {
 						
 						delete _entityReferences[entity];
 						
-	                    detach(IEntity(entity), new Dictionary(), true);
+	                    detach(entity);
 					}
 					finally {
 						_mergeContext.merging = saveMerging;
